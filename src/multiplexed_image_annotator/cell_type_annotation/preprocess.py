@@ -22,12 +22,20 @@ from .utils import crop_cell, process_chunk
 
     
 
-class ImageProcessor(object):
+class ImageProcessor:
     def __init__(self, csv_path, parser, main_path, device, batch_id='', infer=True, normalization=True, blur=0, amax=100, cell_size=30, logger=None, n_jobs=0) -> None:
         df = pd.read_csv(csv_path)
         self.image_paths = df['image_path']
         self.mask_paths = df['mask_path']
         assert len(self.image_paths) == len(self.mask_paths)
+
+        # Per-image identifier derived from image_path basename (no extension).
+        # Used only to disambiguate output filenames/rows; the input CSV
+        # schema is unchanged.
+        self.image_ids = [
+            os.path.splitext(os.path.basename(str(p)))[0]
+            for p in self.image_paths
+        ]
 
         self.logger = logger
 
@@ -263,8 +271,9 @@ class ImageProcessor(object):
                 index = self.parser.indices[panel]
 
 
-                # get index of -1 in index
-                idx = [i for i, x in enumerate(index) if x != -1]
+                # Positions of markers that are actually present in this panel
+                # (i.e. not the -1 sentinel used for missing channels).
+                idx = [k for k, v in enumerate(index) if v != -1]
                 if not self.infer or -1 not in index or panel == "structure" or panel == "nerve":
                     intensity_full = self._img2patches(image, mask, index, cell_pos_dict, None, id=self.batch_id + "_" + str(i) + "_" + panel, 
                                     save_path=self.save_path, save_tensor=True, int_full=q==0, n_jobs=self.n_jobs)

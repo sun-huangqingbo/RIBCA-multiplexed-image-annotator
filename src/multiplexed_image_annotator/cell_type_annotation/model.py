@@ -27,6 +27,13 @@ import umap
 import pickle
 
 
+# Resolve model and working-dir paths relative to this file, not the CWD,
+# so the annotator works regardless of where Python is invoked from.
+_MODULE_DIR = os.path.dirname(os.path.abspath(__file__))
+_MODEL_DIR = os.path.join(_MODULE_DIR, "models")
+_WORKING_DIR_TEMP = os.path.join(_MODULE_DIR, "_working_dir_temp")
+
+
 
 class VisionTransformer(timm.models.vision_transformer.VisionTransformer):
     """ Vision Transformer with support for global average pooling
@@ -87,7 +94,7 @@ def vit_tiny(**kwargs):
         norm_layer=partial(nn.LayerNorm, eps=1e-6), **kwargs)
     return model    
 
-class Annotator(object):
+class Annotator:
     """
     Annotator class to predict cell types and tissue structures using the provided models
     """
@@ -160,9 +167,8 @@ class Annotator(object):
             os.makedirs(self.result_dir)
 
         if cell_type_confidence is None:
-            self.cell_type_confidence = {'B cell': -1, 'CD4 T cell': -1, 'CD8 T cell': -1, 'Dendritic cell': -1, 'Regulatory T cell': -1, 'Granulocyte cell': -1, 'Mast cell': -1, 
-                        'M1 macrophage cell': -1, 'M2 macrophage cell': -1, 'Natural killer cell': -1, 'Plasma cell': -1, 'Endothelial cell': -1,
-                        'Epithelial cell': -1, 'Stroma cell': -1, 'Smooth muscle': -1, 'Proliferating/tumor cell': -1, 'Nerve cell': -1, 'Others': -1}
+            # Default: -1 means "fall back to self.confidence_thresh" at voting time.
+            self.cell_type_confidence = {ct: -1 for ct in self.cell_types}
         else:
             self.cell_type_confidence = cell_type_confidence
 
@@ -186,9 +192,10 @@ class Annotator(object):
         self.annotations = []
     
     def load_models(self):
-        if os.path.exists("src/multiplexed_image_annotator/cell_type_annotation/models/immune_base.pth"):
+        immune_base_path = os.path.join(_MODEL_DIR, "immune_base.pth")
+        if os.path.exists(immune_base_path):
             self.immune_base_model = vit_s(img_size=40, in_chans=7, num_classes=5, drop_path_rate=0.1, global_pool=False)
-            checkpoint = torch.load("src/multiplexed_image_annotator/cell_type_annotation/models/immune_base.pth", map_location=self.device, weights_only=False)["model"]
+            checkpoint = torch.load(immune_base_path, map_location=self.device, weights_only=False)["model"]
             self.immune_base_model.load_state_dict(checkpoint)
             self.immune_base_model.eval()
             self.immune_base_model.to(self.device)
@@ -196,9 +203,10 @@ class Annotator(object):
             print("Immune base model not found")
             self.logger.log("Immune base model not found")
         
-        if os.path.exists("src/multiplexed_image_annotator/cell_type_annotation/models/immune_extended.pth"):
+        immune_extended_path = os.path.join(_MODEL_DIR, "immune_extended.pth")
+        if os.path.exists(immune_extended_path):
             self.immune_extended_model = vit_m(img_size=40, in_chans=10, num_classes=8, drop_path_rate=0.1, global_pool=False)
-            checkpoint = torch.load("src/multiplexed_image_annotator/cell_type_annotation/models/immune_extended.pth", map_location=self.device, weights_only=False)["model"]
+            checkpoint = torch.load(immune_extended_path, map_location=self.device, weights_only=False)["model"]
             self.immune_extended_model.load_state_dict(checkpoint)
             self.immune_extended_model.eval()
             self.immune_extended_model.to(self.device)
@@ -206,9 +214,10 @@ class Annotator(object):
             print("Immune extended model not found")
             self.logger.log("Immune extended model not found")
         
-        if os.path.exists("src/multiplexed_image_annotator/cell_type_annotation/models/immune_full.pth"):
+        immune_full_path = os.path.join(_MODEL_DIR, "immune_full.pth")
+        if os.path.exists(immune_full_path):
             self.immune_full_model = vit_l(img_size=40, in_chans=15, num_classes=12, drop_path_rate=0.1, global_pool=False)
-            checkpoint = torch.load("src/multiplexed_image_annotator/cell_type_annotation/models/immune_full.pth", map_location=self.device, weights_only=False)["model"]
+            checkpoint = torch.load(immune_full_path, map_location=self.device, weights_only=False)["model"]
             self.immune_full_model.load_state_dict(checkpoint)
             self.immune_full_model.eval()
             self.immune_full_model.to(self.device)
@@ -216,9 +225,10 @@ class Annotator(object):
             print("Immune full model not found")
             self.logger.log("Immune full model not found")
         
-        if os.path.exists("src/multiplexed_image_annotator/cell_type_annotation/models/struct.pth"):
+        struct_path = os.path.join(_MODEL_DIR, "struct.pth")
+        if os.path.exists(struct_path):
             self.struct_model = vit_s(img_size=40, in_chans=7, num_classes=6, drop_path_rate=0.1, global_pool=False)
-            checkpoint = torch.load("src/multiplexed_image_annotator/cell_type_annotation/models/struct.pth", map_location=self.device, weights_only=False)["model"]
+            checkpoint = torch.load(struct_path, map_location=self.device, weights_only=False)["model"]
             self.struct_model.load_state_dict(checkpoint)
             self.struct_model.eval()
             self.struct_model.to(self.device)
@@ -226,9 +236,10 @@ class Annotator(object):
             print("Tissue structure model not found")
             self.logger.log("Tissue structure model not found")
 
-        if os.path.exists("src/multiplexed_image_annotator/cell_type_annotation/models/nerve.pth"):
+        nerve_path = os.path.join(_MODEL_DIR, "nerve.pth")
+        if os.path.exists(nerve_path):
             self.nerve_model = vit_tiny(img_size=40, in_chans=3, num_classes=2, drop_path_rate=0.1, global_pool=False)
-            checkpoint = torch.load("src/multiplexed_image_annotator/cell_type_annotation/models/nerve.pth", map_location=self.device, weights_only=False)["model"]
+            checkpoint = torch.load(nerve_path, map_location=self.device, weights_only=False)["model"]
             self.nerve_model.load_state_dict(checkpoint)
             self.nerve_model.eval()
             self.nerve_model.to(self.device)
@@ -389,8 +400,9 @@ class Annotator(object):
                     # We've processed all available batches
                     break
             
-            # Load this batch
-            images = torch.load(batch_file)
+            # Load this batch (these are pure tensor files we wrote ourselves,
+            # so weights_only=True is safe and silences PyTorch's FutureWarning).
+            images = torch.load(batch_file, weights_only=True)
             
             # Process predictions in sub-batches
             temp = []
@@ -437,7 +449,13 @@ class Annotator(object):
             batch_size (int): Number of patches to process at once during prediction.
         """
         self.logger.log("\nStart predicting cell types and tissue structures.")
-        
+
+        if self._n_images == 0:
+            raise RuntimeError(
+                "Annotator has no preprocessed images. "
+                "Call .preprocess() before .predict()."
+            )
+
         # Check if models are loaded
         if not self._loaded:
             self.load_models()
@@ -676,14 +694,12 @@ class Annotator(object):
             
 
     def _get_unique_cell_types(self):
-        # use set to get unique cell types
+        # Gather the unique cell type labels across all images.
+        # np.unique already returns a sorted array, so no extra sort is needed.
         cell_types = set()
         for i in range(len(self.annotations)):
             cell_types.update(self.annotations[i])
-        # sort the cell types
-        cell_types = np.array(list(cell_types))
-        cell_types = np.sort(cell_types)
-        return cell_types
+        return np.array(sorted(cell_types))
      
     
     def get_cell_type_names(self):
@@ -695,6 +711,28 @@ class Annotator(object):
             else:
                 txt += "  "
         return txt
+
+
+    def _get_image_ids(self):
+        """
+        Return (image_ids, safe_ids) aligned with self.annotations.
+
+        image_ids are the raw identifiers, taken from self.preprocessor.image_ids
+        (derived from image_path basenames). safe_ids are filesystem-safe
+        versions for use in filenames. Falls back to ["image_0", "image_1", ...]
+        if the preprocessor did not populate image_ids or the length mismatches.
+        """
+        n = len(self.annotations)
+        ids = getattr(self.preprocessor, "image_ids", None)
+        if ids is None or len(ids) != n:
+            ids = [f"image_{i}" for i in range(n)]
+        else:
+            ids = [str(x) for x in ids]
+        safe = [
+            "".join(c if c.isalnum() or c in "-_." else "_" for c in x)
+            for x in ids
+        ]
+        return ids, safe
 
 
     def generate_heatmap(self, integrate=False):
@@ -721,6 +759,7 @@ class Annotator(object):
             plt.savefig(f)
             plt.close()
         else:
+            _, safe_ids = self._get_image_ids()
             for i in range(len(self.annotations)):
                 celltypes = np.unique(self.annotations[i])
                 colormap = np.zeros((len(celltypes), len(self.preprocessor.intensity_full[0][0])))
@@ -733,7 +772,7 @@ class Annotator(object):
                         temp.append(self.preprocessor.intensity_full[i][k])
                     colormap[j] = np.mean(temp, axis=0)
                 # save the heatmap
-                f = os.path.join(self.result_dir, f"{self.batch_id}_heatmap_{i}.png")
+                f = os.path.join(self.result_dir, f"{self.batch_id}_heatmap_{i}_{safe_ids[i]}.png")
                 plt.figure(figsize=(colormap.shape[1] // 4, colormap.shape[0] // 4))
                 sns.heatmap(colormap, cmap='vlag', xticklabels=self.channel_parser.markers, yticklabels=celltypes, linewidth=.5)
                 plt.tight_layout()
@@ -768,13 +807,24 @@ class Annotator(object):
     def export_annotations(self):
         if len(self.annotations) == 0:
             raise ValueError("No annotations to export")
-        all_annotations = []
+
+        image_ids, safe_ids = self._get_image_ids()
+        image_paths = list(self.preprocessor.image_paths)
 
         for i in range(len(self.annotations)):
-            f = os.path.join(self.result_dir, f"{self.batch_id}_annotation_{i}.csv")
+            img_id = image_ids[i]
+            safe_id = safe_ids[i]
+
+            f = os.path.join(
+                self.result_dir,
+                f"{self.batch_id}_annotation_{i}_{safe_id}.csv",
+            )
             # write into a csv file
             with open(f, "w") as file:
-                file.write("Cell Index,Cell Type,Confidence,Row,Column,Tissue Region\n")
+                # Header comments preserve provenance (raw id + full path)
+                file.write(f"# image_id: {img_id}\n")
+                file.write(f"# image_path: {image_paths[i]}\n")
+                file.write("Image ID,Cell Index,Cell Type,Confidence,Row,Column,Tissue Region\n")
                 for j, key in enumerate(self.preprocessor.cell_pos_dict[i].keys()):
                     # file.write(f"Cell {key}: {self.annotations[i][j]}\n")
                     cell_type_int = np.where(self.cell_types == self.annotations[i][j])[0][0]
@@ -785,14 +835,21 @@ class Annotator(object):
                     row = round(np.mean(row), 2)
                     col = round(np.mean(col), 2)
 
-                    tissue_region_label = "Region " + str(self.tissue_regions[i][key]) if hasattr(self, 'tissue_regions') else None
+                    # Empty string when tissue regions weren't computed, so the
+                    # CSV column parses as NaN in pandas rather than the literal
+                    # string "None".
+                    if hasattr(self, 'tissue_regions'):
+                        tissue_region_label = "Region " + str(self.tissue_regions[i][key])
+                    else:
+                        tissue_region_label = ""
 
-                    file.write(f"{key},{self.annotations[i][j]},{conf},{row},{col},{tissue_region_label}\n")
-            # close
-            file.close()
+                    file.write(
+                        f"{img_id},{key},{self.annotations[i][j]},{conf},"
+                        f"{row},{col},{tissue_region_label}\n"
+                    )
 
             # log
-            self.logger.log(f"Exported annotations for image {i} to {f}")
+            self.logger.log(f"Exported annotations for image {i} (image_id={img_id}) to {f}")
 
 
     def neighborhood_analysis(self, n_neighbors=25, integrate=True, normalize=True):
@@ -809,10 +866,12 @@ class Annotator(object):
             raise ValueError("No masks to colorize")
         if len(self.annotations) == 0:
             raise ValueError("No annotations to colorize")
-        
+
+        _, safe_ids = self._get_image_ids()
 
         for i in range(len(self.preprocessor.masks)):
             mask = self.preprocessor.masks[i]
+            safe_id = safe_ids[i]
 
             colormap = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
             colormap2 = np.zeros((mask.shape[0], mask.shape[1], 3), dtype=np.uint8)
@@ -839,22 +898,24 @@ class Annotator(object):
 
             
             # save the colorized mask
-            f = os.path.join(self.result_dir, f"{self.batch_id}_colorized_annotation_{i}.png")
+            f = os.path.join(self.result_dir, f"{self.batch_id}_colorized_annotation_{i}_{safe_id}.png")
             Image.fromarray(colormap).save(f)
 
             if not from_script:
-                f = "./src/multiplexed_image_annotator/cell_type_annotation/_working_dir_temp/output_img.png"
+                os.makedirs(_WORKING_DIR_TEMP, exist_ok=True)
+                f = os.path.join(_WORKING_DIR_TEMP, "output_img.png")
                 Image.fromarray(colormap3).save(f)
 
-            f = os.path.join(self.result_dir, f"{self.batch_id}_confidence_{i}.png")
+            f = os.path.join(self.result_dir, f"{self.batch_id}_confidence_{i}_{safe_id}.png")
             Image.fromarray(colormap2).save(f)
 
             if self.n_regions > 0:
-                f = os.path.join(self.result_dir, f"{self.batch_id}_tissue_region_{i}.png")
+                f = os.path.join(self.result_dir, f"{self.batch_id}_tissue_region_{i}_{safe_id}.png")
                 Image.fromarray(tissuemap).save(f)
 
             if not from_script and self.n_regions > 0:
-                f = "./src/multiplexed_image_annotator/cell_type_annotation/_working_dir_temp/output_img_2.png"
+                os.makedirs(_WORKING_DIR_TEMP, exist_ok=True)
+                f = os.path.join(_WORKING_DIR_TEMP, "output_img_2.png")
                 Image.fromarray(tissuemap2).save(f)
 
 
@@ -887,6 +948,7 @@ class Annotator(object):
             plt.close()
 
         else:
+            _, safe_ids = self._get_image_ids()
             for i in range(len(self.annotations)):
                 N = 0
                 temp = {k: 0 for k in self.cell_types}
@@ -907,7 +969,7 @@ class Annotator(object):
                 plt.legend(legend, loc="center left", bbox_to_anchor=(1, 0.5))
                 ax.axis('equal')
                 plt.tight_layout()
-                f = os.path.join(self.result_dir, f"{self.batch_id}_cell-type_composition_{i}.png")
+                f = os.path.join(self.result_dir, f"{self.batch_id}_cell-type_composition_{i}_{safe_ids[i]}.png")
                 plt.savefig(f)
                 plt.close()
 
@@ -917,4 +979,3 @@ class Annotator(object):
             os.remove(os.path.join(self.temp_dir, f))
         os.rmdir(self.temp_dir)
         self.logger.log("Temporary files cleared")
-
