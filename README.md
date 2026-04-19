@@ -3,21 +3,20 @@
 
 
 ## Overview
-This repository contains a flexible and robust cell-type annotation tool for highly multiplexed tissue images. Our paper can be found [here](https://www.biorxiv.org/content/10.1101/2024.09.12.612510v1). It is generalizable to new image collections without extra fine-tuning. 
+This repository contains a flexible and robust cell-type annotation tool for highly multiplexed tissue images. Our paper is now published in [Cell Systems](https://www.cell.com/cell-systems/fulltext/S2405-4712(25)00207-8). It is generalizable to new image collections without extra fine-tuning. 
 Instead of a single model, we constructed an ensemble of image-derived models, which makes it compatible with any common antibody panel by matching their markers with one or multiple base models in this ensemble.
 The output of this tool is a cell-type map, its annotation confidence, and spatial statistics of cell-type distribution. Our software has a Napari plugin for interactively validating annotations.
 
 ## Citation
 ```
-@article {Sun2024.09.12.612510,
+@article {Sun2025flexible,
 	author = {Sun, Huangqingbo and Yu, Shiqiu and Casals, Anna Martinez and B{\"a}ckstr{\"o}m, Anna and Lu, Yuxin and Lindskog, Cecilia and Lundberg, Emma and Murphy, Robert F.},
 	title = {Flexible and robust cell type annotation for highly multiplexed tissue images},
-	elocation-id = {2024.09.12.612510},
-	year = {2024},
-	doi = {10.1101/2024.09.12.612510},
-	publisher = {Cold Spring Harbor Laboratory},
-	URL = {https://www.biorxiv.org/content/early/2024/09/16/2024.09.12.612510},
-	journal = {bioRxiv}
+    journal={Cell Systems},
+    volume={16},
+    number={9},
+    year={2025},
+    publisher={Elsevier}
 }
 ```
 
